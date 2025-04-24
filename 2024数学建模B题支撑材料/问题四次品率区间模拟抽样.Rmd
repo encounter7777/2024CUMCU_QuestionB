@@ -1,0 +1,116 @@
+---
+title: "2024B4"
+author: "Zhou Jing"
+date: "2024-09-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 贝叶斯序贯检测确定抽样个数
+```{r}
+### 贝叶斯序贯检测确定抽样个数
+library(stats)
+
+rate <- c()
+for (threshold in seq(0.01,0.2,0.01) ){
+alpha0 <- 1
+beta0 <- 9  # 已知先验条件
+tolerance <- 0.015  # 容忍度
+confidence <- 0.95  # 置信度
+times <- c()
+
+# 停止条件
+stop_condition <- function(alpha, beta, threshold, tolerance) {
+  range <- pbeta(threshold + tolerance, alpha, beta) - pbeta(threshold - tolerance, alpha, beta)
+  return(range > confidence)
+}
+
+# 序贯检验
+bayesian <- function(observations, alpha0, beta0, threshold, tolerance, confidence) {
+  alpha1 <- alpha0
+  beta1 <- beta0
+  n <- 0 # 抽样次数
+  
+  # 逐次抽样
+  for (obs in observations) {
+    # 修改后验分布
+    alpha1 <- alpha1 + obs
+    beta1 <- beta1 + (1 - obs)
+    n <- n + 1
+    
+    # 检查
+    if (stop_condition(alpha1, beta1, threshold, tolerance)) {
+#      cat(n, "次抽样后，信度超过", confidence, "，可以认定次品率等于标称值\n")
+      break
+    }
+  }
+  
+  # 检查
+  if (n == length(observations)) {
+#    cat("未能达到目标信度\n")
+  }
+  
+  return(list(alpha1 = alpha1, beta1 = beta1, n = n))
+}
+
+# 模拟抽样
+#set.seed(100)
+for (i in 1:5000) {
+  observations <- rbinom(5000, 1, threshold)
+  result <- bayesian(observations, alpha0, beta0, threshold, tolerance, confidence)
+  
+  # 检验
+  #cat("最终后验分布参数: alpha =", result$alpha1, ", beta =", result$beta1, "\n")
+  #cat("总抽样次数:", result$n, "\n")
+  
+  # 单次模拟的最小检验次数存储
+  times <- c(times, result$n)
+}
+
+# 得到平均最小检验次数
+mean(times)
+
+
+
+### 模拟抽样，得到置信区间
+alpha0 <- 1
+beta0 <- 1   # 未知先验条件，设为均匀分布
+n <- mean(times)  # 所求最小次数
+low <- c()
+high <- c()
+real <- threshold  # 真实值
+M <- matrix(ncol = 2, nrow = 1)  # 存储12组数据
+
+for (i in 1:5000){
+    # 模拟抽样
+    x <- rbinom(n, 1, real)
+    bad <- sum(x)
+    
+    # 修改后验分布
+    alpha1 <- alpha0 + bad
+    beta1 <- beta0 + n - bad
+    
+    # 求解置信区间
+    CI <- qbeta(p = c(0.025, 0.975), shape1 = alpha1, shape2 = beta1)
+    low <- CI[1]  # 下界
+    high <- CI[2]  # 上界
+    M <- rbind(M, c(low, high))
+}
+
+#计算偏差率
+r <- abs(real-apply(M[-1, ],2,mean))/real
+rate <- c(rate,mean(r))
+}
+```
+
+
+```{r}
+#绘图
+par(mar=c(4,4,1,1))
+plot(seq(0.01,0.2,0.01),rate,type = "l",xlab="次品率",ylab="偏差率",col="blue",lwd=2)
+points(seq(0.01,0.2,0.01),rate,lwd=2,pch=10,col="blue")
+```
+
